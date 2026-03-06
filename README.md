@@ -21,33 +21,52 @@ EEG-based brain-computer interfaces (BCIs) that control prosthetic limbs and exo
 - Measures inference latency overhead to confirm real-time control feasibility
 - Provides a reproducible experimental framework across 9 subjects and 5 perturbation magnitudes
 
-This project serves as preliminary work for a Master's research proposal on adversarial security in BCI-driven assistive robotics.
+A spoofed EEG signal that causes a prosthetic limb to move in the wrong direction is not an accuracy statistic. It is a safety incident.
 
 ---
 
-### Vulnerability — Clean vs. Under Attack (Subject 1)
+## Key Results
+
+**Full 9-subject benchmark — BCI Competition IV Dataset 2a — 100 training epochs**
+
+### Vulnerability — 9-Subject Averages
 
 | Attack | ε | No Defense | Input Smoothing | Adversarial Training |
 |--------|---|-----------|-----------------|----------------------|
-| Baseline (clean) | — | **63.2%** | — | — |
-| FGSM | 0.01 | 14.0% | 15.8% | **52.6%** |
-| FGSM | 0.05 | 0.0% | 0.0% | **29.8%** |
-| FGSM | 0.10 | 0.0% | 0.0% | **7.0%** |
-| PGD | 0.01 | 14.0% | 15.8% | **52.6%** |
-| PGD | 0.05 | 0.0% | 0.0% | **29.8%** |
-| PGD | 0.10 | 0.0% | 0.0% | **8.8%** |
+| Baseline (clean) | — | **57.9%** | — | — |
+| FGSM | 0.01 | 10.1% | 9.9% | **38.8%** |
+| FGSM | 0.05 | 0.0% | 0.0% | **18.5%** |
+| FGSM | 0.10 | 0.0% | 0.0% | **5.1%** |
+| PGD  | 0.01 | 9.4% | 9.9% | **38.8%** |
+| PGD  | 0.05 | 0.0% | 0.0% | **18.9%** |
 
-**Headline finding:** An FGSM adversarial perturbation at ε=0.01 — imperceptible to human observers — reduces EEGNet motor imagery classification accuracy from **63.2% → 14.0%**, a degradation of **49.2 percentage points**. Adversarial training recovers accuracy to **52.6%** under the same attack.
+**Headline finding:** An FGSM adversarial perturbation at ε=0.01 — imperceptible to human observers — reduces average EEGNet motor imagery classification accuracy from **57.9% → 10.1%**, a degradation of **47.8 percentage points** across all 9 subjects. Adversarial training recovers accuracy to **38.8%** under the same attack (+28.7pp recovery).
 
-### Latency (Subject 1, CPU)
+PGD attack produces marginally stronger degradation (9.4% average), confirming the vulnerability persists under iterative attack strategies and is not specific to the attack method.
+
+### Per-Subject Results — FGSM ε=0.01
+
+| Subject | Clean | No Defense | Adv Training | Recovery |
+|---------|-------|-----------|--------------|----------|
+| S1 | 71.9% | 19.3% | 50.9% | +31.6pp |
+| S2 | 38.6% | 1.8% | 22.8% | +21.1pp |
+| S3 | 73.7% | 5.3% | 47.4% | +42.1pp |
+| S4 | 38.6% | 3.5% | 29.8% | +26.3pp |
+| S5 | 42.1% | 5.3% | 26.3% | +21.1pp |
+| S6 | 36.8% | 0.0% | 31.6% | +31.6pp |
+| S7 | 63.2% | 1.8% | 26.3% | +24.6pp |
+| S8 | 79.0% | 19.3% | 49.1% | +29.8pp |
+| S9 | 77.2% | 35.1% | **64.9%** | +29.8pp |
+| **Avg** | **57.9%** | **10.1%** | **38.8%** | **+28.7pp** |
+
+### Latency (CPU, avg across subjects)
 
 | Condition | Inference Latency |
 |-----------|------------------|
-| Baseline (no defense) | 2.28 ms |
-| With Input Smoothing | 2.64 ms |
-| Overhead | +0.36 ms |
+| Baseline (no defense) | 5.98 ms |
+| With Input Smoothing | ~7.2 ms |
 
-Defense overhead of **0.36ms** is well within real-time BCI control constraints (~50ms window).
+Average baseline inference of **5.98ms** is well within the real-time BCI control constraint (~50ms window).
 
 ---
 
@@ -119,7 +138,7 @@ pip install -e .
 
 ## Usage
 
-### Quick Start — Run Full Benchmark
+### Run Full Benchmark
 
 ```bash
 python experiments/run_experiment.py
@@ -133,11 +152,11 @@ Edit `experiments/configs/default_config.yaml`:
 
 ```yaml
 dataset:
-  subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9]  # subjects to run
+  subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 training:
-  epochs: 100         # base model training epochs
-  adv_epochs: 50      # adversarial training epochs
+  epochs: 100
+  adv_epochs: 50
 
 attacks:
   fgsm:
@@ -145,31 +164,6 @@ attacks:
   pgd:
     epsilons: [0.01, 0.05, 0.1, 0.2, 0.3]
     steps: 10
-```
-
-### Run Individual Components
-
-```python
-from src.models.eegnet import EEGNet
-from src.attacks.fgsm import fgsm_attack
-from src.attacks.pgd import pgd_attack
-from src.defenses.input_smoothing import GaussianSmoothing
-import torch
-import torch.nn as nn
-
-# Load model
-model = EEGNet(num_classes=4, channels=22, samples=1000)
-
-# Run FGSM attack
-criterion = nn.CrossEntropyLoss()
-x_adv, perturbation = fgsm_attack(model, x, y, epsilon=0.05, criterion=criterion)
-
-# Run PGD attack
-x_adv, perturbation = pgd_attack(model, x, y, epsilon=0.05, steps=10)
-
-# Apply input smoothing defense
-smoother = GaussianSmoothing(channels=22, kernel_size=5, sigma=1.0)
-x_clean = smoother(x_adv)
 ```
 
 ---
@@ -180,53 +174,23 @@ x_clean = smoother(x_adv)
 BCIShield/
 ├── data/
 │   ├── raw/                    ← Place .gdf files here
-│   ├── processed/
-│   └── download_dataset.py     ← Dataset download instructions
+│   └── processed/
 ├── experiments/
 │   ├── configs/
-│   │   └── default_config.yaml ← All hyperparameters
-│   └── run_experiment.py       ← Main experiment pipeline
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_train_baseline.ipynb
-│   ├── 03_adversarial_attacks.ipynb
-│   ├── 04_defense_evaluation.ipynb
-│   └── 05_results_visualization.ipynb
+│   │   └── default_config.yaml
+│   └── run_experiment.py
 ├── src/
-│   ├── models/
-│   │   └── eegnet.py           ← EEGNet implementation (from scratch)
-│   ├── attacks/
-│   │   ├── fgsm.py             ← FGSM attack
-│   │   └── pgd.py              ← PGD attack
-│   ├── defenses/
-│   │   ├── adversarial_training.py
-│   │   └── input_smoothing.py
-│   ├── data/
-│   │   └── dataset.py          ← MNE loader + preprocessing
-│   └── evaluation/
-│       └── metrics.py          ← Accuracy, latency, defense effectiveness
-├── results/
-│   └── tables/
-│       └── experiment_results.csv
-├── tests/
+│   ├── models/eegnet.py
+│   ├── attacks/fgsm.py
+│   ├── attacks/pgd.py
+│   ├── defenses/adversarial_training.py
+│   ├── defenses/input_smoothing.py
+│   ├── data/dataset.py
+│   └── evaluation/metrics.py
+├── results/tables/
+│   └── experiment_results.csv
 ├── requirements.txt
 └── setup.py
-```
-
----
-
-## Reproducing Results
-
-All experiments are fully reproducible with fixed random seeds.
-
-```bash
-# Smoke test — 1 subject, 10 epochs (~15 minutes on CPU)
-# Edit default_config.yaml: subjects: [1], epochs: 10, adv_epochs: 5
-python experiments/run_experiment.py
-
-# Full benchmark — 9 subjects, 100 epochs (~6-8 hours on CPU)
-# Edit default_config.yaml: subjects: [1,2,3,4,5,6,7,8,9], epochs: 100
-python experiments/run_experiment.py
 ```
 
 ---
@@ -238,16 +202,13 @@ python experiments/run_experiment.py
 2. Bandpass filter: 4–40 Hz (FIR, firwin design)
 3. Epoch extraction: 0–4 seconds post motor imagery cue
 4. Per-channel z-score normalization
-5. Train/validation split: 80/20 from training file
+5. Train/validation split: 80/20
 
 ### Evaluation Protocol
 - Per-subject training and evaluation (no cross-subject transfer)
-- Metrics: classification accuracy (%), inference latency (ms), defense recovery (%)
-- Attack evaluation: white-box (attacker has full model access)
-- Defense evaluation: naive (attacker does not adapt to defense)
-
-### Perturbation Bounds
-All attacks operate under L∞ norm constraint: ||x_adv - x||∞ ≤ ε
+- White-box attack evaluation (attacker has full model access)
+- Naive defense evaluation (attacker does not adapt to defense)
+- Perturbation bounds: L∞ norm constraint ||x_adv - x||∞ ≤ ε
 
 ---
 
@@ -260,8 +221,6 @@ This benchmark is the first step toward a hybrid defense architecture designed s
 ---
 
 ## Citation
-
-If you use BCIShield in your research, please cite:
 
 ```bibtex
 @misc{rawal2026bcishield,
@@ -288,8 +247,8 @@ If you use BCIShield in your research, please cite:
 - [x] FGSM and PGD attack implementations
 - [x] Adversarial training defense
 - [x] Gaussian input smoothing defense
-- [x] Full benchmark pipeline with incremental CSV saving
-- [ ] Full 9-subject results (in progress)
+- [x] Full 9-subject benchmark (100 epochs, 5 epsilon values)
+- [x] Complete results table across all subjects and conditions
 - [ ] Jupyter notebooks with visualizations
 - [ ] Confidence gating defense (Phase 2)
 - [ ] Channel saliency analysis
