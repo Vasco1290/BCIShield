@@ -1,0 +1,28 @@
+dataset:
+  name: "BCIC-IV-2a"
+  path: "data/raw/"
+  channels: 22
+  classes: 4
+  samples: 1000
+  subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 100
+  adv_epochs: 50
+
+attacks:
+  fgsm:
+    epsilons: [0.01, 0.05, 0.1, 0.2, 0.3]
+  pgd:
+    epsilons: [0.01, 0.05, 0.1, 0.2, 0.3]
+    steps: 10
+
+defenses:
+  input_smoothing:
+    kernel_size: 5
+    sigma: 1.0
+  adversarial_training:
+    train_epsilon: 0.1
+    alpha: 0.5
