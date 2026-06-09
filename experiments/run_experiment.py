@@ -14,6 +14,7 @@ from src.attacks.pgd import pgd_attack
 from src.defenses.input_smoothing import GaussianSmoothing
 from src.defenses.adversarial_training import train_adversarial_epoch
 from src.evaluation.metrics import calculate_accuracy, measure_latency, measure_defense_latency, defense_effectiveness
+from src.utils import set_seed
 
 def load_config(config_path: str) -> dict:
     with open(config_path, 'r') as f:
@@ -88,8 +89,20 @@ def run_experiment_for_subject(subject_id, config, device, results_list):
 
     # Base Model Initialization and Training
     model = EEGNet(num_classes=config['dataset']['classes'], channels=config['dataset']['channels'], samples=config['dataset']['samples']).to(device)
-    print("Training Base Model...")
-    model = train_base_model(model, train_loader, config['training']['epochs'], config['training']['learning_rate'], device)
+    
+    # Checkpoint paths
+    models_dir = os.path.join('results', 'models')
+    os.makedirs(models_dir, exist_ok=True)
+    base_model_path = os.path.join(models_dir, f"subject_{subject_id}_base.pth")
+    
+    if os.path.exists(base_model_path):
+        print(f"Loading Base Model from {base_model_path}...")
+        model.load_state_dict(torch.load(base_model_path, map_location=device))
+    else:
+        print("Training Base Model...")
+        model = train_base_model(model, train_loader, config['training']['epochs'], config['training']['learning_rate'], device)
+        torch.save(model.state_dict(), base_model_path)
+        print(f"Saved Base Model to {base_model_path}")
     
     # 1. Base Evaluation (Clean)
     print("Evaluating Clean Accuracy...")
@@ -113,16 +126,24 @@ def run_experiment_for_subject(subject_id, config, device, results_list):
     smoothing_latency = measure_defense_latency(model, smoothing, dummy_input, device=device)
     
     # Train Adv Model
-    print("Training Adversarially Robust Model...")
     adv_model = copy.deepcopy(model).to(device)
-    optimizer_adv = optim.Adam(adv_model.parameters(), lr=config['training']['learning_rate'])
-    criterion = nn.CrossEntropyLoss()
-    adv_epochs = config['training']['adv_epochs']
-    train_eps = config['defenses']['adversarial_training']['train_epsilon']
-    train_alpha = config['defenses']['adversarial_training']['alpha']
+    adv_model_path = os.path.join(models_dir, f"subject_{subject_id}_adv.pth")
     
-    for __ in range(adv_epochs):
-        train_adversarial_epoch(adv_model, train_loader, optimizer_adv, criterion, pgd_attack, device, epsilon=train_eps, alpha=train_alpha)
+    if os.path.exists(adv_model_path):
+        print(f"Loading Adversarially Robust Model from {adv_model_path}...")
+        adv_model.load_state_dict(torch.load(adv_model_path, map_location=device))
+    else:
+        print("Training Adversarially Robust Model...")
+        optimizer_adv = optim.Adam(adv_model.parameters(), lr=config['training']['learning_rate'])
+        criterion = nn.CrossEntropyLoss()
+        adv_epochs = config['training']['adv_epochs']
+        train_eps = config['defenses']['adversarial_training']['train_epsilon']
+        train_alpha = config['defenses']['adversarial_training']['alpha']
+        
+        for __ in range(adv_epochs):
+            train_adversarial_epoch(adv_model, train_loader, optimizer_adv, criterion, pgd_attack, device, epsilon=train_eps, alpha=train_alpha)
+        torch.save(adv_model.state_dict(), adv_model_path)
+        print(f"Saved Adversarially Robust Model to {adv_model_path}")
         
     adv_model_latency = base_latency # same architecture, same latency
         
@@ -144,14 +165,26 @@ def run_experiment_for_subject(subject_id, config, device, results_list):
                 'defense': 'None', 'accuracy': adv_acc, 'latency_ms': base_latency
             })
             
-            # 3. Attack vs Input Smoothing
-            smooth_acc = evaluate_model(model, test_loader, device, 
+            # 3. Attack vs Input Smoothing (Naive)
+            smooth_acc_naive = evaluate_model(model, test_loader, device, 
                                         attack_fn=attack_fn, epsilon=eps, 
                                         defense_module=smoothing,
                                         attack_kwargs=attack_kwargs)
             results_list.append({
                 'subject_id': subject_id, 'attack': attack_name, 'epsilon': eps, 
-                'defense': 'Input Smoothing', 'accuracy': smooth_acc, 'latency_ms': smoothing_latency
+                'defense': 'Input Smoothing (Naive)', 'accuracy': smooth_acc_naive, 'latency_ms': smoothing_latency
+            })
+            
+            # 3b. Attack vs Input Smoothing (Adaptive White-Box)
+            # Wrap defense and model together so attack backpropagates through the defense
+            adaptive_model = nn.Sequential(smoothing, model)
+            smooth_acc_adaptive = evaluate_model(adaptive_model, test_loader, device,
+                                                attack_fn=attack_fn, epsilon=eps,
+                                                defense_module=None,
+                                                attack_kwargs=attack_kwargs)
+            results_list.append({
+                'subject_id': subject_id, 'attack': attack_name, 'epsilon': eps, 
+                'defense': 'Input Smoothing (Adaptive)', 'accuracy': smooth_acc_adaptive, 'latency_ms': smoothing_latency
             })
             
             # 4. Attack vs Adversarial Training
@@ -173,6 +206,11 @@ def run_experiment_for_subject(subject_id, config, device, results_list):
 def main():
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'default_config.yaml')
     config = load_config(config_path)
+    
+    # Enforce global seeding for reproducibility
+    seed = config.get('seed', 42)
+    set_seed(seed)
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
