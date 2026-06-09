@@ -44,6 +44,10 @@ data/processed/*
 !data/processed/.gitkeep
 results/figures/*
 !results/figures/.gitkeep
+!results/figures/time_domain_comparison.png
+!results/figures/psd_spectral_analysis.png
+!results/figures/spatial_topography_perturbation.png
+!results/figures/robustness_benchmark_curves.png
 results/tables/*
 !results/tables/.gitkeep
 results/models/

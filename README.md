@@ -70,6 +70,40 @@ Average baseline inference of **5.98ms** is well within the real-time BCI contro
 
 ---
 
+## Signal & Spatial Visualizations
+
+To analyze the impact of white-box adversarial perturbations on the underlying brain signals, we provide signal analysis visualizations across the time, frequency, and spatial domains (results plotted below are for Subject 1):
+
+### 1. Robustness Curves
+Compares classification accuracy across multiple perturbation bounds ($\epsilon$) under FGSM and PGD attacks, demonstrating the difference between naive smoothing (vulnerable to adaptive bypass) and adversarial training.
+
+<p align="center">
+  <img src="results/figures/robustness_benchmark_curves.png" width="800" alt="Robustness Curves">
+</p>
+
+### 2. Time-Domain Signal Disruption
+Shows the clean EEG signal vs. the PGD adversarial EEG signal ($\epsilon = 0.05$) on channel Cz, along with the isolated adversarial perturbation.
+
+<p align="center">
+  <img src="results/figures/time_domain_comparison.png" width="800" alt="Time Domain Disruption">
+</p>
+
+### 3. Frequency-Domain Power Spectral Density (PSD)
+Welch's PSD analysis of clean vs. adversarial EEG signals. The white-box optimizer injects significant high-frequency noise, disrupting the key motor rhythm bands (Alpha/Mu and Beta).
+
+<p align="center">
+  <img src="results/figures/psd_spectral_analysis.png" width="600" alt="PSD Analysis">
+</p>
+
+### 4. Spatial Topography Mapping (MNE-Python)
+A scalp topography mapping of the L2 perturbation magnitude across all 22 EEG channels, illustrating that the attacker targeting the white-box model automatically concentrates noise over parietal and motor cortex channels (e.g. Cz, Pz, POz) to disrupt motor imagery features.
+
+<p align="center">
+  <img src="results/figures/spatial_topography_perturbation.png" width="450" alt="Spatial Topography">
+</p>
+
+---
+
 ## Architecture
 
 ### Model — EEGNet
@@ -249,7 +283,8 @@ This benchmark is the first step toward a hybrid defense architecture designed s
 - [x] Gaussian input smoothing defense
 - [x] Full 9-subject benchmark (100 epochs, 5 epsilon values)
 - [x] Complete results table across all subjects and conditions
-- [ ] Jupyter notebooks with visualizations
+- [x] Global seeding, model checkpointing, and adaptive evaluation (Phase 1)
+- [x] Jupyter notebooks with time, frequency, and spatial visualizations
 - [ ] Confidence gating defense (Phase 2)
 - [ ] Channel saliency analysis
 - [ ] Contribution to IBM Adversarial Robustness Toolbox (ART)
